@@ -7,14 +7,15 @@ package com.company;
 import com.sun.crypto.provider.*;
 import com.sun.security.sasl.Provider;
 import net.jsign.DigestAlgorithm;
-import net.jsign.asn1.authenticode.AuthenticodeDigestCalculatorProvider;
+import net.jsign.asn1.authenticode.*;
 import net.jsign.pe.CertificateTableEntry;
 import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.anssi.ANSSIObjectIdentifiers;
 import org.bouncycastle.asn1.cms.*;
-import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
-import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
-import org.bouncycastle.asn1.x509.X509ObjectIdentifiers;
+import org.bouncycastle.asn1.cms.Attribute;
+import org.bouncycastle.asn1.x509.*;
+import org.bouncycastle.cert.AttributeCertificateHolder;
+import org.bouncycastle.cert.X509AttributeCertificateHolder;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cms.*;
 
@@ -35,6 +36,7 @@ import sun.security.jca.ProviderList;
 import sun.security.jgss.wrapper.SunNativeProvider;
 import sun.security.provider.Sun;
 
+import javax.crypto.Cipher;
 import java.io.*;
 
 import java.net.ConnectException;
@@ -50,6 +52,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import static com.google.common.primitives.Chars.fromByteArray;
+import static org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.encryptionAlgorithm;
 
 public class Main {
 
@@ -57,7 +60,7 @@ public class Main {
 
         Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
-        File file = new File("EXES/ideaIC-2019.1.3.exe");
+        File file = new File("EXES/jre-7u67-windows-i586.exe");
         PEFile peFile = new PEFile(file);
 
 
@@ -95,6 +98,23 @@ public class Main {
             System.out.println("Signatures found: " + signatures.size());
             for (CMSSignedData signedData : signatures) {
 
+
+                System.out.println(signedData.getSignedContentTypeOID());
+                ContentInfo contentInfo = signedData.toASN1Structure();
+
+                SignedData signedData1 = SignedData.getInstance(contentInfo.getContent());
+                AuthenticatedDataParser
+                ASN1Set set = signedData1.getEncapContentInfo().toASN1Primitive());
+                ASN1Encodable encodable = signedData1.getEncapContentInfo().getContent();
+                System.out.println(signedData1.getEncapContentInfo().getContent());
+                System.out.println(signedData1.getEncapContentInfo().getContentType());
+                System.out.println(contentInfo.getContentType());
+                /*
+                System.out.println(content.getContentType());
+
+                SpcIndirectDataContent spcIndirectDataContent = new SpcIndirectDataContent(content.write(System.out));
+                System.out.println(spcIndirectDataContent.toASN1Primitive());*/
+
                 /*SignerInformation signerInformation = signedData.getSignerInfos().getSigners().iterator().next();
                 X509CertificateHolder certificate = (X509CertificateHolder) signedData.getCertificates().getMatches(signerInformation.getSID()).iterator().next();
                 DigestAlgorithm algorithm = DigestAlgorithm.of(signerInformation.getDigestAlgorithmID().getAlgorithm());
@@ -113,8 +133,8 @@ public class Main {
                 */
 
                 Store store = signedData.getCertificates();
-
                 SignerInformationStore signers = signedData.getSignerInfos();
+                signedData.getSignedContent();
                 Collection<SignerInformation> c = signers.getSigners();
 
                 for(SignerInformation signer : c) {
@@ -123,12 +143,25 @@ public class Main {
 
                     digestAlgorithms.add(DigestAlgorithm.of(new ASN1ObjectIdentifier(signer.getDigestAlgOID())));
 
-                    X509Certificate cert = convertToCert(h);
 
 //                    signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(cert));
 
                     //Attempt to implement doVerify() from SignerInformation.java
+
                     ASN1Primitive validMessageDigest = getSingleValuedSignedAttribute(CMSAttributes.messageDigest, "message-digest", signer);
+
+                    ASN1Set set = signer.getSignedAttributes().get(CMSAttributes.contentType).getAttrValues();
+                    System.out.println(set.getObjectAt(0));
+
+                    ASN1Encodable wow = set.getObjectAt(0);
+
+                    System.out.println(wow.toASN1Primitive());
+                    System.out.println(validMessageDigest);
+
+                    String a = "";
+
+                    System.out.println("bytes: ");
+
                     if (validMessageDigest == null) {
 
                         throw new CMSException("the message-digest signed attribute type MUST be present when there are any signed attributes present");
@@ -143,12 +176,8 @@ public class Main {
                             throw new CMSSignerDigestMismatchException("message-digest attribute value does not match calculated value");
                         }*/
 
-                        System.out.println(signedMessageDigest.toString());
+                        System.out.println(signedMessageDigest);
                     }
-
-                    System.out.println(new DefaultAlgorithmNameFinder().getAlgorithmName(ASN1ObjectIdentifier.getInstance(h.getSignatureAlgorithm().getAlgorithm())) + ", " + h.getSignatureAlgorithm().getAlgorithm().getId());
-                    DigestAlgorithm digestAlgorithm = DigestAlgorithm.of(new ASN1ObjectIdentifier(signer.getDigestAlgOID()));
-                    peFile.computeDigest(digestAlgorithm);
 
 //                    signer.verify(new org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(h));
 
@@ -170,7 +199,10 @@ public class Main {
 
         for(DigestAlgorithm d : digestAlgorithms) {
             System.out.println(d);
-            System.out.println(peFile.computeDigest(d));
+            for (byte b : peFile.computeDigest(d)) {
+                String st = String.format("%02X", b);
+                System.out.print(st);
+            }
         }
     }
 
@@ -184,10 +216,9 @@ public class Main {
     }
 
     private static ASN1Primitive getSingleValuedSignedAttribute(ASN1ObjectIdentifier var1, String var2, SignerInformation signerInformation) throws CMSException {
-        AttributeTable var3 = signerInformation.getUnsignedAttributes();
-        if (var3 != null && var3.getAll(var1).size() > 0) {
-            throw new CMSException("The " + var2 + " attribute MUST NOT be an unsigned attribute");
-        } else {
+        AttributeTable var3 = signerInformation.getSignedAttributes();
+
+
             AttributeTable var4 = signerInformation.getSignedAttributes();
             if (var4 == null) {
                 return null;
@@ -208,7 +239,7 @@ public class Main {
                         throw new CMSException("The SignedAttributes in a signerInfo MUST NOT include multiple instances of the " + var2 + " attribute");
                 }
             }
-        }
+
     }
 
 
@@ -233,4 +264,16 @@ public class Main {
 
         return entries;
     }
+
+    private static byte[] pad(byte[] data, int multiple) {
+        if (data.length % multiple == 0) {
+            return data;
+        } else {
+            byte[] copy = new byte[data.length + (multiple - data.length % multiple)];
+            System.arraycopy(data, 0, copy, 0, data.length);
+            return copy;
+        }
+    }
+
+
 }
