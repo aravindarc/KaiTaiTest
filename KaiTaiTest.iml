@@ -8,5 +8,6 @@
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="net.jsign:jsign-maven-plugin:2.1" level="project" />
+    <orderEntry type="library" name="org.xipki:pkcs11-iaik:4.0.0" level="project" />
   </component>
 </module>

@@ -1,66 +1,46 @@
 package com.company;
 
-
-
-
-
-import com.sun.crypto.provider.*;
-import com.sun.security.sasl.Provider;
+import org.xipki.security.pkcs11.iaik.IaikP11Module;
+import javafx.beans.binding.ObjectExpression;
 import net.jsign.DigestAlgorithm;
-import net.jsign.asn1.authenticode.*;
+import net.jsign.asn1.authenticode.AuthenticodeObjectIdentifiers;
+import net.jsign.asn1.authenticode.SpcAttributeTypeAndOptionalValue;
+import net.jsign.asn1.authenticode.SpcIndirectDataContent;
 import net.jsign.pe.CertificateTableEntry;
 import org.bouncycastle.asn1.*;
 import org.bouncycastle.asn1.anssi.ANSSIObjectIdentifiers;
 import org.bouncycastle.asn1.cms.*;
 import org.bouncycastle.asn1.cms.Attribute;
+import org.bouncycastle.asn1.util.ASN1Dump;
 import org.bouncycastle.asn1.x509.*;
-import org.bouncycastle.cert.AttributeCertificateHolder;
-import org.bouncycastle.cert.X509AttributeCertificateHolder;
 import org.bouncycastle.cert.X509CertificateHolder;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cms.*;
 
-import org.bouncycastle.cms.jcajce.JcaSignerInfoVerifierBuilder;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
-import org.bouncycastle.crypto.tls.HashAlgorithm;
+import org.bouncycastle.cms.jcajce.JcaX509CertSelectorConverter;
 import org.bouncycastle.operator.*;
-import org.bouncycastle.operator.jcajce.JcaContentVerifierProviderBuilder;
-import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
-import org.bouncycastle.util.Arrays;
 import org.bouncycastle.util.Store;
-import org.bouncycastle.util.encoders.Hex;
-import net.jsign.pe.DataDirectory;
-import net.jsign.pe.DataDirectoryType;
 import net.jsign.pe.PEFile;
-import sun.misc.IOUtils;
-import sun.security.jca.ProviderList;
-import sun.security.jgss.wrapper.SunNativeProvider;
-import sun.security.provider.Sun;
+import sun.security.pkcs.PKCS7;
+import sun.security.x509.AlgorithmId;
+import sun.security.x509.KeyUsageExtension;
 
-import javax.crypto.Cipher;
 import java.io.*;
 
-import java.net.ConnectException;
 import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.security.spec.RSAKeyGenParameterSpec;
-import java.security.spec.RSAPublicKeySpec;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-
-import static com.google.common.primitives.Chars.fromByteArray;
-import static org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers.encryptionAlgorithm;
+import java.util.*;
 
 public class Main {
 
-    public static void main(String[] args) throws IOException, CMSException, CertificateException, OperatorCreationException, NoSuchAlgorithmException, InvalidKeyException, NoSuchProviderException, SignatureException {
+    public static void main(String[] args) throws IOException, CMSException, CertificateException, NoSuchProviderException, NoSuchAlgorithmException, InvalidKeyException, SignatureException, OperatorCreationException {
 
         Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
 
-        File file = new File("EXES/jre-7u67-windows-i586.exe");
+        File file = new File("EXES/TeamViewer_Setup.exe");
         PEFile peFile = new PEFile(file);
 
 
@@ -83,32 +63,28 @@ public class Main {
             System.out.println();
         }*/
 
+
         ArrayList<DigestAlgorithm> digestAlgorithms = new ArrayList<>();
         List<CMSSignedData> signatures = peFile.getSignatures();
 
-        //attempt to get protected SignerInfo in SignerInformation Class
-        List<CertificateTableEntry> certTable = getCertificateTable(signatures);
 
-        for(CertificateTableEntry entry : certTable) {
+        ArrayList<DigestInfo> digestInfos = new ArrayList<>();
 
-
-        }
         if (!signatures.isEmpty()) {
 
             System.out.println("Signatures found: " + signatures.size());
             for (CMSSignedData signedData : signatures) {
 
-
-                System.out.println(signedData.getSignedContentTypeOID());
                 ContentInfo contentInfo = signedData.toASN1Structure();
 
                 SignedData signedData1 = SignedData.getInstance(contentInfo.getContent());
-                AuthenticatedDataParser
-                ASN1Set set = signedData1.getEncapContentInfo().toASN1Primitive());
-                ASN1Encodable encodable = signedData1.getEncapContentInfo().getContent();
-                System.out.println(signedData1.getEncapContentInfo().getContent());
-                System.out.println(signedData1.getEncapContentInfo().getContentType());
-                System.out.println(contentInfo.getContentType());
+
+                ContentInfo contentInfo1 = signedData1.getEncapContentInfo();
+
+                //Study ASN1Dump.dumpAsString() to implement getSpcIndirectDataContent(...) or any other ASN.1 parser
+                DigestInfo digestInfo = getSpcIndirectDataContent(contentInfo1);
+                digestInfos.add(digestInfo);
+
                 /*
                 System.out.println(content.getContentType());
 
@@ -141,26 +117,28 @@ public class Main {
 
                     X509CertificateHolder h = (X509CertificateHolder) store.getMatches(signer.getSID()).iterator().next();
 
+
+
                     digestAlgorithms.add(DigestAlgorithm.of(new ASN1ObjectIdentifier(signer.getDigestAlgOID())));
 
+                    JcaX509CertificateConverter converter = new JcaX509CertificateConverter();
+                    X509Certificate certificate = converter.getCertificate(h);
+                    PublicKey key = certificate.getPublicKey();
+                    KeyUsageExtension extension = new KeyUsageExtension(certificate.getKeyUsage());
+                    Signature signature = Signature.getInstance(certificate.getSigAlgName());
+                    signature.initVerify(key);
+
+                    signature.update(signer.getEncodedSignedAttributes());
+                    printDigest(signer.getEncodedSignedAttributes());
+                    printDigest(signer.getSignedAttributes().toASN1Structure().getEncoded());
+                    System.out.println(signature.verify(signer.getSignature()));
 
 //                    signer.verify(new JcaSimpleSignerInfoVerifierBuilder().setProvider("BC").build(cert));
 
                     //Attempt to implement doVerify() from SignerInformation.java
 
                     ASN1Primitive validMessageDigest = getSingleValuedSignedAttribute(CMSAttributes.messageDigest, "message-digest", signer);
-
-                    ASN1Set set = signer.getSignedAttributes().get(CMSAttributes.contentType).getAttrValues();
-                    System.out.println(set.getObjectAt(0));
-
-                    ASN1Encodable wow = set.getObjectAt(0);
-
-                    System.out.println(wow.toASN1Primitive());
                     System.out.println(validMessageDigest);
-
-                    String a = "";
-
-                    System.out.println("bytes: ");
 
                     if (validMessageDigest == null) {
 
@@ -197,12 +175,24 @@ public class Main {
             }
         }
 
-        for(DigestAlgorithm d : digestAlgorithms) {
-            System.out.println(d);
+        for(DigestInfo digestInfo : digestInfos) {
+
+            DigestAlgorithm d = DigestAlgorithm.of(digestInfo.getAlgorithmId().getAlgorithm());
+            System.out.print("Computed Hash: ");
             for (byte b : peFile.computeDigest(d)) {
                 String st = String.format("%02X", b);
                 System.out.print(st);
             }
+            System.out.println();
+
+            System.out.print("Embedded Hash: ");
+            for (byte b : digestInfo.getDigest()) {
+                String st = String.format("%02X", b);
+                System.out.print(st);
+            }
+            System.out.println();
+
+            System.out.println("Does the hashes match: " + Arrays.equals(peFile.computeDigest(d), digestInfo.getDigest()));
         }
     }
 
@@ -242,10 +232,6 @@ public class Main {
 
     }
 
-
-
-
-
     private static List<CertificateTableEntry> getCertificateTable(List<CMSSignedData> cmsSignedData) {
 
         List<CertificateTableEntry> entries = new ArrayList<>();
@@ -276,4 +262,68 @@ public class Main {
     }
 
 
+
+    private static DigestInfo getSpcIndirectDataContent(ContentInfo contentInfo) {
+
+        DigestInfo digestInfo;
+
+        AlgorithmIdentifier algId = null;
+        byte[] digest = null;
+
+        if((contentInfo.getContentType().getId()).equals(AuthenticodeObjectIdentifiers.SPC_INDIRECT_DATA_OBJID.getId())) {
+
+            ASN1Primitive obj = contentInfo.getContent().toASN1Primitive();
+
+            if(obj instanceof ASN1Sequence) {
+
+                Enumeration e = ((ASN1Sequence)obj).getObjects();
+
+                e.nextElement();
+                Object messageDigestObj = e.nextElement();
+
+                if(messageDigestObj instanceof ASN1Sequence) {
+
+                    Enumeration e1 = ((ASN1Sequence)messageDigestObj).getObjects();
+
+
+                    Object seq = e1.nextElement();
+                    Object digestObj = e1.nextElement();
+
+                    if(seq instanceof ASN1Sequence) {
+
+                        Enumeration e2 = ((ASN1Sequence)seq).getObjects();
+
+                        Object digestAlgorithmObj = e2.nextElement();
+
+                        if(digestAlgorithmObj instanceof ASN1ObjectIdentifier) {
+
+                            System.out.println(((ASN1ObjectIdentifier) digestAlgorithmObj).getId());
+                            AlgorithmIdentifier a = new DefaultDigestAlgorithmIdentifierFinder().find(new DefaultAlgorithmNameFinder().getAlgorithmName((ASN1ObjectIdentifier) digestAlgorithmObj));
+                            algId = AlgorithmIdentifier.getInstance(a);
+                        }
+                    }
+
+                    if(digestObj instanceof ASN1OctetString) {
+
+                        ASN1OctetString oct = (ASN1OctetString)digestObj;
+
+                        digest = oct.getOctets();
+                    }
+                }
+            }
+        }
+
+        digestInfo = new DigestInfo(algId, digest);
+
+        return digestInfo;
+    }
+
+    private static void printDigest(byte[] digest) {
+
+        for (byte b : digest) {
+            String st = String.format("%02X", b);
+            System.out.print(st);
+        }
+        System.out.println();
+    }
 }
